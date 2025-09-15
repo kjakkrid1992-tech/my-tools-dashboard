@@ -77,6 +77,12 @@
             <h2 id="formModalTitle" class="text-2xl font-bold mb-4 text-white"></h2>
             <div class="space-y-4">
                 <input type="hidden" id="toolId" value="">
+                
+                <div id="github-select-container" class="hidden">
+                    <label for="githubRepoSelect" class="block mb-2 text-sm font-medium text-slate-300">เลือกจาก GitHub Repository</label>
+                    <select id="githubRepoSelect" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5">
+                        </select>
+                </div>
                 <div><label for="toolDisplayName" class="block mb-2 text-sm font-medium text-slate-300">ชื่อที่แสดง</label><input type="text" id="toolDisplayName" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required></div>
                 <div><label for="toolUrl" class="block mb-2 text-sm font-medium text-slate-300">URL ของเครื่องมือ</label><input type="url" id="toolUrl" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required></div>
                 <p id="modal-error" class="text-red-400 text-sm hidden"></p>
@@ -106,7 +112,7 @@
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import Sortable from "https://cdn.jsdelivr.net/npm/sortablejs@latest/modular/sortable.esm.js";
 
-        // --- Firebase Configuration (นี่คือส่วนที่อัปเดตเป็นของโปรเจกต์ใหม่) ---
+        // --- Firebase Configuration ---
         const firebaseConfig = {
           apiKey: "AIzaSyA1vFYbYFHr5n2G8ULRfuLcg0CDp4MuOQo",
           authDomain: "my-tools-v2-5cf61.firebaseapp.com",
@@ -115,6 +121,9 @@
           messagingSenderId: "789124530524",
           appId: "1:789124530524:web:50dddbcc66e94ff0fec199"
         };
+        
+        // --- GitHub Configuration ---
+        const GITHUB_USERNAME = 'kjakkrid1992-tech';
 
         // --- Global State ---
         let currentTools = [];
@@ -135,56 +144,85 @@
         const appContainer = document.getElementById('app-container');
         const loginButton = document.getElementById('login-button');
         const logoutButton = document.getElementById('logout-button');
+        const githubRepoSelect = document.getElementById('githubRepoSelect');
+        const githubSelectContainer = document.getElementById('github-select-container');
 
-        // --- Functions ---
-        async function loginWithGoogle() {
+        // *** START: NEW GITHUB API FUNCTIONS ***
+        async function fetchGitHubRepos() {
+            const url = `https://api.github.com/users/${GITHUB_USERNAME}/repos?sort=updated&per_page=100`;
             try {
-                await signInWithPopup(auth, provider);
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`GitHub API error: ${response.status}`);
+                }
+                const repos = await response.json();
+                return repos;
             } catch (error) {
-                console.error("Google sign-in failed:", error);
-                showToast("การเข้าสู่ระบบล้มเหลว");
+                console.error("Failed to fetch GitHub repos:", error);
+                showToast("ไม่สามารถโหลดข้อมูลจาก GitHub");
+                return []; // Return empty array on failure
             }
         }
 
-        async function logout() {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                console.error("Logout failed:", error);
-                showToast("การออกจากระบบล้มเหลว");
-            }
+        function populateRepoDropdown(repos) {
+            githubRepoSelect.innerHTML = '<option value="">-- เลือก Repository --</option>'; // Clear and add default
+            repos.forEach(repo => {
+                const option = document.createElement('option');
+                option.value = repo.name;
+                option.textContent = repo.name;
+                githubRepoSelect.appendChild(option);
+            });
         }
         
+        function handleRepoSelectionChange(event) {
+            const repoName = event.target.value;
+            const displayNameInput = document.getElementById('toolDisplayName');
+            const urlInput = document.getElementById('toolUrl');
+
+            if (repoName) {
+                displayNameInput.value = repoName;
+                // Assumes GitHub Pages URL format. Add trailing slash if your deploys need it.
+                urlInput.value = `https://${GITHUB_USERNAME}.github.io/${repoName}/`;
+            } else {
+                displayNameInput.value = '';
+                urlInput.value = '';
+            }
+        }
+        // *** END: NEW GITHUB API FUNCTIONS ***
+
+
+        // --- Functions (Existing code from here) ---
+        async function loginWithGoogle() {
+            try { await signInWithPopup(auth, provider); } catch (error) { console.error("Google sign-in failed:", error); showToast("การเข้าสู่ระบบล้มเหลว"); }
+        }
+        async function logout() {
+            try { await signOut(auth); } catch (error) { console.error("Logout failed:", error); showToast("การออกจากระบบล้มเหลว"); }
+        }
         function renderTools(tools) {
             const toolListContainer = document.getElementById('tool-list');
             toolListContainer.innerHTML = '';
             currentTools = tools;
-
             if (tools.length === 0) {
                 toolListContainer.innerHTML = `<div class="text-center text-slate-400 p-4"><p>ยังไม่มีเครื่องมือ</p><p class="text-sm">คลิก '+' เพื่อเพิ่มเครื่องมือแรกของคุณ</p></div>`;
                 document.getElementById("toolFrame").src = "about:blank";
                 document.getElementById('mobile-tool-title').textContent = "Dashboard";
                 return;
             }
-
             tools.forEach((tool, index) => {
                 const toolItem = document.createElement('div');
                 toolItem.className = 'tool-item flex items-center justify-between p-2 rounded hover:bg-slate-700 transition-colors';
                 toolItem.dataset.toolId = tool.id;
-
                 const link = document.createElement('a');
                 link.href = '#';
                 link.textContent = tool.displayName;
                 link.className = 'block flex-grow truncate pr-2';
                 link.onclick = (e) => { e.preventDefault(); loadTool(tool.id); setActive(toolItem); };
-                
                 const buttonsContainer = document.createElement('div');
                 buttonsContainer.className = 'tool-item-buttons flex items-center space-x-2';
                 const editButton = document.createElement('button');
                 editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5z"/></svg>`;
                 editButton.className = 'text-slate-400 hover:text-sky-400';
                 editButton.onclick = (e) => { e.stopPropagation(); openFormModal('edit', tool.id); };
-                
                 const deleteButton = document.createElement('button');
                 deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>`;
                 deleteButton.className = 'text-slate-400 hover:text-red-500';
@@ -193,33 +231,20 @@
                 buttonsContainer.appendChild(deleteButton);
                 toolItem.appendChild(link);
                 toolItem.appendChild(buttonsContainer);
-                
-                if (index === 0 && !currentOpenToolId) {
-                    loadTool(tool.id);
-                    setActive(toolItem);
-                } else if (currentOpenToolId === tool.id) {
-                    setActive(toolItem);
-                }
-                
+                if (index === 0 && !currentOpenToolId) { loadTool(tool.id); setActive(toolItem); }
+                else if (currentOpenToolId === tool.id) { setActive(toolItem); }
                 toolListContainer.appendChild(toolItem);
             });
         }
-        
         function setupFirestoreListener() {
-            if (unsubscribe) unsubscribe(); 
-            
+            if (unsubscribe) unsubscribe();
             const q = query(toolsCollectionRef, orderBy("order"));
             unsubscribe = onSnapshot(q, (snapshot) => {
                 const tools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderTools(tools);
                 document.getElementById('loading-overlay').style.display = 'none';
-            }, (error) => {
-                console.error("Error fetching tools:", error);
-                showToast("ไม่สามารถโหลดข้อมูลได้");
-                document.getElementById('loading-overlay').style.display = 'none';
-            });
+            }, (error) => { console.error("Error fetching tools:", error); showToast("ไม่สามารถโหลดข้อมูลได้"); document.getElementById('loading-overlay').style.display = 'none'; });
         }
-
         function loadTool(toolId) {
             const tool = currentTools.find(t => t.id === toolId);
             if (tool) {
@@ -229,37 +254,29 @@
                 if (window.innerWidth < 640) toggleSidebar();
             }
         }
-        
         function setActive(el) {
             document.querySelectorAll('.tool-item.bg-slate-700').forEach(item => item.classList.remove('bg-slate-700'));
             if (el) el.classList.add('bg-slate-700');
         }
-
         async function handleSaveTool() {
             const id = document.getElementById('toolId').value;
             const displayName = document.getElementById('toolDisplayName').value.trim();
             const url = document.getElementById('toolUrl').value.trim();
             const errorP = document.getElementById('modal-error');
-            
             if (!displayName) { errorP.textContent = 'กรุณาใส่ชื่อเครื่องมือ'; errorP.classList.remove('hidden'); return; }
             if (!url || !url.startsWith('http')) { errorP.textContent = 'URL ไม่ถูกต้อง (ต้องขึ้นต้นด้วย http)'; errorP.classList.remove('hidden'); return; }
-
             try {
-                if (id) { // Edit mode
+                if (id) {
                     const toolDocRef = doc(db, `users/${userId}/tools`, id);
                     await updateDoc(toolDocRef, { displayName, url });
                     showToast('แก้ไขเครื่องมือสำเร็จแล้ว');
-                } else { // Add mode
+                } else {
                     await addDoc(toolsCollectionRef, { displayName, url, order: currentTools.length });
                     showToast('เพิ่มเครื่องมือใหม่แล้ว');
                 }
                 closeFormModal();
-            } catch (error) {
-                console.error("Error saving tool:", error);
-                showToast("เกิดข้อผิดพลาดในการบันทึก");
-            }
+            } catch (error) { console.error("Error saving tool:", error); showToast("เกิดข้อผิดพลาดในการบันทึก"); }
         }
-
         async function performDelete(toolIdToDelete) {
             try {
                 const toolDocRef = doc(db, `users/${userId}/tools`, toolIdToDelete);
@@ -267,51 +284,49 @@
                 if (currentOpenToolId === toolIdToDelete) currentOpenToolId = null;
                 closeDeleteModal();
                 showToast('ลบเครื่องมือแล้ว');
-            } catch (error) {
-                console.error("Error deleting tool:", error);
-                showToast("เกิดข้อผิดพลาดในการลบ");
-            }
+            } catch (error) { console.error("Error deleting tool:", error); showToast("เกิดข้อผิดพลาดในการลบ"); }
         }
-        
         async function handleReorder(newOrderIds) {
             const batch = writeBatch(db);
             newOrderIds.forEach((id, index) => {
                 const docRef = doc(db, `users/${userId}/tools`, id);
                 batch.update(docRef, { order: index });
             });
-            try {
-                await batch.commit();
-                showToast('จัดลำดับใหม่แล้ว');
-            } catch (error) {
-                console.error("Error reordering:", error);
-                showToast("เกิดข้อผิดพลาดในการจัดลำดับ");
-            }
+            try { await batch.commit(); showToast('จัดลำดับใหม่แล้ว'); }
+            catch (error) { console.error("Error reordering:", error); showToast("เกิดข้อผิดพลาดในการจัดลำดับ"); }
         }
         
-        window.openFormModal = (mode, toolId = null) => {
+        // *** MODIFIED: openFormModal is now async to handle fetching repos ***
+        window.openFormModal = async (mode, toolId = null) => {
             const modal = document.getElementById('formModal');
             document.getElementById('modal-error').classList.add('hidden');
             document.getElementById('toolId').value = toolId || '';
             
             if (mode === 'edit') {
+                githubSelectContainer.classList.add('hidden'); // Hide GitHub select in edit mode
                 const toolToEdit = currentTools.find(t => t.id === toolId);
                 if (!toolToEdit) return;
                 document.getElementById('formModalTitle').textContent = "แก้ไขเครื่องมือ";
                 document.getElementById('formModalSaveButton').textContent = "บันทึกการเปลี่ยนแปลง";
                 document.getElementById('toolDisplayName').value = toolToEdit.displayName;
                 document.getElementById('toolUrl').value = toolToEdit.url;
-            } else {
+            } else { // 'add' mode
+                githubSelectContainer.classList.remove('hidden'); // Show GitHub select in add mode
                 document.getElementById('formModalTitle').textContent = "เพิ่มเครื่องมือใหม่";
                 document.getElementById('formModalSaveButton').textContent = "บันทึก";
                 document.getElementById('toolDisplayName').value = '';
                 document.getElementById('toolUrl').value = '';
+                
+                // Fetch and populate repos
+                githubRepoSelect.innerHTML = '<option value="">กำลังโหลด...</option>';
+                const repos = await fetchGitHubRepos();
+                populateRepoDropdown(repos);
             }
             document.getElementById('formModalSaveButton').onclick = handleSaveTool;
             modal.classList.remove('hidden');
             modal.classList.add('flex');
         };
         window.closeFormModal = () => document.getElementById('formModal').classList.add('hidden');
-        
         window.openDeleteModal = (toolId, displayName) => {
             document.getElementById('toolNameToDelete').textContent = displayName;
             document.getElementById('confirmDeleteButton').onclick = () => performDelete(toolId);
@@ -323,7 +338,6 @@
             document.getElementById('sidebar').classList.toggle('open');
             document.getElementById('sidebar-overlay').classList.toggle('hidden');
         };
-        
         function showToast(message) {
             const toast = document.getElementById('toast');
             toast.querySelector('#toast-message').textContent = message;
@@ -331,7 +345,6 @@
             clearTimeout(toastTimeout);
             toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
         }
-
         function initializeDragAndDrop() {
             new Sortable(document.getElementById('tool-list'), {
                 animation: 150,
@@ -365,6 +378,7 @@
         // --- Event Listeners & Initialization ---
         loginButton.addEventListener('click', loginWithGoogle);
         logoutButton.addEventListener('click', logout);
+        githubRepoSelect.addEventListener('change', handleRepoSelectionChange); // Add event listener for the dropdown
         initializeDragAndDrop();
     </script>
 </body>
