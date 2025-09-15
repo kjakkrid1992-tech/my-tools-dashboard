@@ -1,338 +1,393 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Tools Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- NOTE: SortableJS is now imported in the script module -->
-  <style>
-    body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
-    iframe { width: 100%; height: 100vh; border: none; }
-    .sidebar { background-color: #1e293b; transition: transform 0.3s ease-in-out; }
-    @media (max-width: 640px) {
-      .sidebar { transform: translateX(-100%); position: fixed; top: 0; left: 0; height: 100%; z-index: 100; }
-      .sidebar.open { transform: translateX(0); }
-    }
-    .tool-item { cursor: grab; }
-    .tool-item:active { cursor: grabbing; }
-    .tool-item-buttons { opacity: 0; transition: opacity 0.2s ease-in-out; }
-    .tool-item:hover .tool-item-buttons { opacity: 1; }
-    .sortable-ghost { background-color: #334155; opacity: 0.7; }
-    .sortable-drag { opacity: 1 !important; }
-    .modal-overlay, .sidebar-overlay { transition: opacity 0.3s ease; background-color: rgba(0, 0, 0, 0.5); }
-    .modal-container { transition: all 0.3s ease; }
-    #toast { transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out; transform: translateY(100%); opacity: 0; }
-    #toast.show { transform: translateY(0); opacity: 1; }
-    .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tools Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        iframe { width: 100%; height: 100vh; border: none; }
+        .sidebar { background-color: #1e293b; transition: transform 0.3s ease-in-out; }
+        @media (max-width: 640px) {
+            .sidebar { transform: translateX(-100%); position: fixed; top: 0; left: 0; height: 100%; z-index: 100; }
+            .sidebar.open { transform: translateX(0); }
+        }
+        .tool-item { cursor: grab; }
+        .tool-item:active { cursor: grabbing; }
+        .tool-item-buttons { opacity: 0; transition: opacity 0.2s ease-in-out; }
+        .tool-item:hover .tool-item-buttons { opacity: 1; }
+        .sortable-ghost { background-color: #334155; opacity: 0.7; }
+        .sortable-drag { opacity: 1 !important; }
+        .modal-overlay, .sidebar-overlay { transition: opacity 0.3s ease; background-color: rgba(0, 0, 0, 0.5); }
+        .modal-container { transition: all 0.3s ease; }
+        #toast { transition: transform 0.5s ease-in-out, opacity 0.5s ease-in-out; transform: translateY(100%); opacity: 0; }
+        #toast.show { transform: translateY(0); opacity: 1; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 2s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
-<body class="flex h-screen bg-slate-900">
+<body class="bg-slate-900">
 
-  <!-- Loading Indicator -->
-  <div id="loading-overlay" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900 bg-opacity-75">
-      <div class="loader"></div>
-  </div>
-
-  <!-- Sidebar Overlay (for mobile) -->
-  <div id="sidebar-overlay" class="fixed inset-0 z-50 hidden sm:hidden" onclick="toggleSidebar()"></div>
-
-  <!-- Sidebar -->
-  <div id="sidebar" class="sidebar w-64 flex-shrink-0 flex-col p-4 flex">
-    <h1 class="text-xl font-bold mb-4">📊 My Tools</h1>
-    <div id="tool-list" class="flex-grow space-y-2 overflow-y-auto">
-      <!-- Tools will be rendered here from Firestore -->
-    </div>
-    <button onclick="openFormModal('add')" class="mt-4 w-full text-center px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-colors">
-      + เพิ่มเครื่องมือ
-    </button>
-  </div>
-
-  <!-- Main Content -->
-  <div class="flex-1 flex flex-col">
-      <div class="sm:hidden flex items-center p-2 bg-slate-800 shadow-md">
-          <button onclick="toggleSidebar()" class="p-2 rounded-md hover:bg-slate-700">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
-          </button>
-          <h2 id="mobile-tool-title" class="text-lg font-semibold ml-4 truncate">Dashboard</h2>
-      </div>
-      <div class="flex-1"><iframe id="toolFrame" src="about:blank"></iframe></div>
-  </div>
-  
-  <!-- Modals (Add/Edit, Delete, Toast) -->
-  <div id="formModal" class="fixed inset-0 z-50 items-center justify-center modal-overlay hidden" onclick="closeFormModal()">
-      <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md modal-container" onclick="event.stopPropagation()">
-          <h2 id="formModalTitle" class="text-2xl font-bold mb-4 text-white"></h2>
-          <div class="space-y-4">
-              <input type="hidden" id="toolId" value="">
-              <div><label for="toolDisplayName" class="block mb-2 text-sm font-medium text-slate-300">ชื่อที่แสดง</label><input type="text" id="toolDisplayName" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required></div>
-              <div><label for="toolUrl" class="block mb-2 text-sm font-medium text-slate-300">URL ของเครื่องมือ</label><input type="url" id="toolUrl" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required></div>
-              <p id="modal-error" class="text-red-400 text-sm hidden"></p>
-          </div>
-          <div class="mt-6 flex justify-end space-x-4">
-              <button type="button" onclick="closeFormModal()" class="py-2 px-4 rounded text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600">ยกเลิก</button>
-              <button id="formModalSaveButton" type="button" class="py-2 px-4 rounded text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"></button>
-          </div>
-      </div>
-  </div>
-  <div id="deleteConfirmModal" class="fixed inset-0 z-50 items-center justify-center modal-overlay hidden" onclick="closeDeleteModal()">
-    <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-sm modal-container" onclick="event.stopPropagation()">
-        <h2 class="text-xl font-bold text-white">ยืนยันการลบ</h2>
-        <p class="mt-2 text-slate-300">คุณแน่ใจหรือไม่ว่าต้องการลบเครื่องมือ "<span id="toolNameToDelete" class="font-semibold"></span>"?</p>
-        <div class="mt-6 flex justify-end space-x-4">
-            <button onclick="closeDeleteModal()" class="py-2 px-4 rounded text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600">ยกเลิก</button>
-            <button id="confirmDeleteButton" class="py-2 px-4 rounded text-sm font-medium text-white bg-red-600 hover:bg-red-700">ยืนยัน</button>
+    <div id="login-container" class="w-full h-screen flex items-center justify-center">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold mb-4">📊 My Tools Dashboard</h1>
+            <p class="text-slate-400 mb-6">กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
+            <button id="login-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center mx-auto">
+                <svg class="w-5 h-5 mr-2" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.222,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,36.21,44,30.551,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path></svg>
+                Sign in with Google
+            </button>
         </div>
     </div>
-  </div>
-  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-green-500 text-white py-2 px-5 rounded-lg shadow-lg"><p id="toast-message"></p></div>
 
-  <script type="module">
-    // --- Firebase SDK Imports ---
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import Sortable from "https://cdn.jsdelivr.net/npm/sortablejs@latest/modular/sortable.esm.js";
+    <div id="app-container" class="hidden h-screen w-full flex">
+        <div id="loading-overlay" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900 bg-opacity-75">
+            <div class="loader"></div>
+        </div>
 
-    // --- Firebase Configuration ---
-    // This is now connected to your Firebase project.
-    const firebaseConfig = {
-        apiKey: "AIzaSyCziiVJX7w8dhPMs4SWOeq5HwBkT9DkBBs",
-        authDomain: "tools-dashboard-5ee9f.firebaseapp.com",
-        projectId: "tools-dashboard-5ee9f",
-        storageBucket: "tools-dashboard-5ee9f.appspot.com", // Corrected storageBucket name
-        messagingSenderId: "1082221439803",
-        appId: "1:1082221439803:web:5b29567ae220b37900e51e"
-    };
+        <div id="sidebar-overlay" class="fixed inset-0 z-50 hidden sm:hidden" onclick="toggleSidebar()"></div>
 
-    // --- Global State ---
-    let currentTools = [];
-    let currentOpenToolId = null;
-    let toastTimeout;
-    let userId = null;
-    let toolsCollectionRef = null;
-    let unsubscribe = null; 
+        <div id="sidebar" class="sidebar w-64 flex-shrink-0 flex-col p-4 flex">
+            <div class="flex items-center justify-between mb-4">
+                <h1 class="text-xl font-bold">📊 My Tools</h1>
+                <button id="logout-button" title="Logout" class="text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0z"/><path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708z"/></svg>
+                </button>
+            </div>
+            <div id="tool-list" class="flex-grow space-y-2 overflow-y-auto">
+                </div>
+            <button onclick="openFormModal('add')" class="mt-4 w-full text-center px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-colors">
+                + เพิ่มเครื่องมือ
+            </button>
+        </div>
 
-    // --- Firebase Initialization ---
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
-
-    // --- Core UI Rendering ---
-    function renderTools(tools) {
-      const toolListContainer = document.getElementById('tool-list');
-      toolListContainer.innerHTML = '';
-      currentTools = tools;
-
-      if (tools.length === 0) {
-          toolListContainer.innerHTML = `<div class="text-center text-slate-400 p-4"><p>ยังไม่มีเครื่องมือ</p><p class="text-sm">คลิก '+' เพื่อเพิ่มเครื่องมือแรกของคุณ</p></div>`;
-          document.getElementById("toolFrame").src = "about:blank";
-          document.getElementById('mobile-tool-title').textContent = "Dashboard";
-          return;
-      }
-
-      tools.forEach((tool) => {
-        const toolItem = document.createElement('div');
-        toolItem.className = 'tool-item flex items-center justify-between p-2 rounded hover:bg-slate-700 transition-colors';
-        toolItem.dataset.toolId = tool.id;
-
-        const link = document.createElement('a');
-        link.href = '#';
-        link.textContent = tool.displayName;
-        link.className = 'block flex-grow truncate pr-2';
-        link.onclick = (e) => { e.preventDefault(); loadTool(tool.id); setActive(toolItem); };
-        
-        const buttonsContainer = document.createElement('div');
-        buttonsContainer.className = 'tool-item-buttons flex items-center space-x-2';
-        const editButton = document.createElement('button');
-        editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5z"/></svg>`;
-        editButton.className = 'text-slate-400 hover:text-sky-400';
-        editButton.onclick = (e) => { e.stopPropagation(); openFormModal('edit', tool.id); };
-        
-        const deleteButton = document.createElement('button');
-        deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>`;
-        deleteButton.className = 'text-slate-400 hover:text-red-500';
-        deleteButton.onclick = (e) => { e.stopPropagation(); openDeleteModal(tool.id, tool.displayName); };
-        buttonsContainer.appendChild(editButton);
-        buttonsContainer.appendChild(deleteButton);
-        toolItem.appendChild(link);
-        toolItem.appendChild(buttonsContainer);
-        
-        if (currentOpenToolId === tool.id || (!currentOpenToolId && tool === tools[0])) {
-            toolItem.classList.add('active');
-            if (!currentOpenToolId && tools.length > 0) loadTool(tools[0].id);
-        }
-        toolListContainer.appendChild(toolItem);
-      });
-    }
+        <div class="flex-1 flex flex-col">
+            <div class="sm:hidden flex items-center p-2 bg-slate-800 shadow-md">
+                <button onclick="toggleSidebar()" class="p-2 rounded-md hover:bg-slate-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                </button>
+                <h2 id="mobile-tool-title" class="text-lg font-semibold ml-4 truncate">Dashboard</h2>
+            </div>
+            <div class="flex-1"><iframe id="toolFrame" src="about:blank"></iframe></div>
+        </div>
+    </div>
     
-    // --- Firestore Listener ---
-    function setupFirestoreListener() {
-        if (unsubscribe) unsubscribe(); 
+    <div id="formModal" class="fixed inset-0 z-50 items-center justify-center modal-overlay hidden" onclick="closeFormModal()">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md modal-container" onclick="event.stopPropagation()">
+            <h2 id="formModalTitle" class="text-2xl font-bold mb-4 text-white"></h2>
+            <div class="space-y-4">
+                <input type="hidden" id="toolId" value="">
+                <div><label for="toolDisplayName" class="block mb-2 text-sm font-medium text-slate-300">ชื่อที่แสดง</label><input type="text" id="toolDisplayName" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required></div>
+                <div><label for="toolUrl" class="block mb-2 text-sm font-medium text-slate-300">URL ของเครื่องมือ</label><input type="url" id="toolUrl" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required></div>
+                <p id="modal-error" class="text-red-400 text-sm hidden"></p>
+            </div>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button type="button" onclick="closeFormModal()" class="py-2 px-4 rounded text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600">ยกเลิก</button>
+                <button id="formModalSaveButton" type="button" class="py-2 px-4 rounded text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"></button>
+            </div>
+        </div>
+    </div>
+    <div id="deleteConfirmModal" class="fixed inset-0 z-50 items-center justify-center modal-overlay hidden" onclick="closeDeleteModal()">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-sm modal-container" onclick="event.stopPropagation()">
+            <h2 class="text-xl font-bold text-white">ยืนยันการลบ</h2>
+            <p class="mt-2 text-slate-300">คุณแน่ใจหรือไม่ว่าต้องการลบเครื่องมือ "<span id="toolNameToDelete" class="font-semibold"></span>"?</p>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button onclick="closeDeleteModal()" class="py-2 px-4 rounded text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600">ยกเลิก</button>
+                <button id="confirmDeleteButton" class="py-2 px-4 rounded text-sm font-medium text-white bg-red-600 hover:bg-red-700">ยืนยัน</button>
+            </div>
+        </div>
+    </div>
+    <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-green-500 text-white py-2 px-5 rounded-lg shadow-lg"><p id="toast-message"></p></div>
+
+    <script type="module">
+        // --- Firebase SDK Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        // *** เพิ่ม Imports สำหรับ Google Auth ***
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import Sortable from "https://cdn.jsdelivr.net/npm/sortablejs@latest/modular/sortable.esm.js";
+
+        // --- Firebase Configuration (เหมือนเดิม) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCziiVJX7w8dhPMs4SWOeq5HwBkT9DkBBs",
+            authDomain: "tools-dashboard-5ee9f.firebaseapp.com",
+            projectId: "tools-dashboard-5ee9f",
+            storageBucket: "tools-dashboard-5ee9f.appspot.com",
+            messagingSenderId: "1082221439803",
+            appId: "1:1082221439803:web:5b29567ae220b37900e51e"
+        };
+
+        // --- Global State (เหมือนเดิม) ---
+        let currentTools = [];
+        let currentOpenToolId = null;
+        let toastTimeout;
+        let userId = null;
+        let toolsCollectionRef = null;
+        let unsubscribe = null; 
+
+        // --- Firebase Initialization (เหมือนเดิม) ---
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
         
-        const q = query(toolsCollectionRef, orderBy("order"));
-        unsubscribe = onSnapshot(q, (snapshot) => {
-            const tools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            renderTools(tools);
-            document.getElementById('loading-overlay').style.display = 'none';
-        }, (error) => {
-            console.error("Error fetching tools:", error);
-            showToast("ไม่สามารถโหลดข้อมูลได้");
-            document.getElementById('loading-overlay').style.display = 'none';
-        });
-    }
+        // *** เพิ่ม Provider สำหรับ Google ***
+        const provider = new GoogleAuthProvider();
 
-    // --- Tool Actions (interact with UI) ---
-    function loadTool(toolId) {
-      const tool = currentTools.find(t => t.id === toolId);
-      if (tool) {
-        document.getElementById("toolFrame").src = tool.url;
-        document.getElementById('mobile-tool-title').textContent = tool.displayName;
-        currentOpenToolId = toolId;
-        if (window.innerWidth < 640) toggleSidebar();
-      }
-    }
-    
-    function setActive(el) {
-        document.querySelectorAll('.tool-item').forEach(item => item.classList.remove('active'));
-        if (el) el.classList.add('active');
-    }
+        // --- UI Element References ---
+        const loginContainer = document.getElementById('login-container');
+        const appContainer = document.getElementById('app-container');
+        const loginButton = document.getElementById('login-button');
+        const logoutButton = document.getElementById('logout-button');
 
-    // --- CRUD Operations (interact with Firestore) ---
-    async function handleSaveTool() {
-        const id = document.getElementById('toolId').value;
-        const displayName = document.getElementById('toolDisplayName').value.trim();
-        const url = document.getElementById('toolUrl').value.trim();
-        const errorP = document.getElementById('modal-error');
-        
-        if (!displayName) { errorP.textContent = 'กรุณาใส่ชื่อเครื่องมือ'; errorP.classList.remove('hidden'); return; }
-        if (!url || !url.startsWith('http')) { errorP.textContent = 'URL ไม่ถูกต้อง (ต้องขึ้นต้นด้วย http)'; errorP.classList.remove('hidden'); return; }
-
-        try {
-            if (id) { // Edit mode
-                const toolDocRef = doc(db, `users/${userId}/tools`, id);
-                await updateDoc(toolDocRef, { displayName, url });
-                showToast('แก้ไขเครื่องมือสำเร็จแล้ว');
-            } else { // Add mode
-                await addDoc(toolsCollectionRef, { displayName, url, order: currentTools.length });
-                showToast('เพิ่มเครื่องมือใหม่แล้ว');
-            }
-            closeFormModal();
-        } catch (error) {
-            console.error("Error saving tool:", error);
-            showToast("เกิดข้อผิดพลาดในการบันทึก");
-        }
-    }
-
-    async function performDelete(toolIdToDelete) {
-        try {
-            const toolDocRef = doc(db, `users/${userId}/tools`, toolIdToDelete);
-            await deleteDoc(toolDocRef);
-            if (currentOpenToolId === toolIdToDelete) currentOpenToolId = null;
-            closeDeleteModal();
-            showToast('ลบเครื่องมือแล้ว');
-        } catch (error) {
-            console.error("Error deleting tool:", error);
-            showToast("เกิดข้อผิดพลาดในการลบ");
-        }
-    }
-    
-    async function handleReorder(newOrderIds) {
-        const batch = writeBatch(db);
-        newOrderIds.forEach((id, index) => {
-            const docRef = doc(db, `users/${userId}/tools`, id);
-            batch.update(docRef, { order: index });
-        });
-        try {
-            await batch.commit();
-            showToast('จัดลำดับใหม่แล้ว');
-        } catch (error) {
-            console.error("Error reordering:", error);
-            showToast("เกิดข้อผิดพลาดในการจัดลำดับ");
-        }
-    }
-    
-    // --- UI Modals & Notifications (Global functions) ---
-    window.openFormModal = (mode, toolId = null) => {
-        const modal = document.getElementById('formModal');
-        document.getElementById('modal-error').classList.add('hidden');
-        document.getElementById('toolId').value = toolId || '';
-        
-        if (mode === 'edit') {
-            const toolToEdit = currentTools.find(t => t.id === toolId);
-            if (!toolToEdit) return;
-            document.getElementById('formModalTitle').textContent = "แก้ไขเครื่องมือ";
-            document.getElementById('formModalSaveButton').textContent = "บันทึกการเปลี่ยนแปลง";
-            document.getElementById('toolDisplayName').value = toolToEdit.displayName;
-            document.getElementById('toolUrl').value = toolToEdit.url;
-        } else {
-            document.getElementById('formModalTitle').textContent = "เพิ่มเครื่องมือใหม่";
-            document.getElementById('formModalSaveButton').textContent = "บันทึก";
-            document.getElementById('toolDisplayName').value = '';
-            document.getElementById('toolUrl').value = '';
-        }
-        document.getElementById('formModalSaveButton').onclick = handleSaveTool;
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-    };
-    window.closeFormModal = () => document.getElementById('formModal').classList.add('hidden');
-    
-    window.openDeleteModal = (toolId, displayName) => {
-        document.getElementById('toolNameToDelete').textContent = displayName;
-        document.getElementById('confirmDeleteButton').onclick = () => performDelete(toolId);
-        document.getElementById('deleteConfirmModal').classList.remove('hidden');
-        document.getElementById('deleteConfirmModal').classList.add('flex');
-    };
-    window.closeDeleteModal = () => document.getElementById('deleteConfirmModal').classList.add('hidden');
-    window.toggleSidebar = () => {
-        document.getElementById('sidebar').classList.toggle('open');
-        document.getElementById('sidebar-overlay').classList.toggle('hidden');
-    };
-    
-    function showToast(message) {
-        const toast = document.getElementById('toast');
-        toast.querySelector('#toast-message').textContent = message;
-        toast.classList.add('show');
-        clearTimeout(toastTimeout);
-        toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
-    }
-
-    // --- Initialization ---
-    function initializeDragAndDrop() {
-        new Sortable(document.getElementById('tool-list'), {
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            dragClass: 'sortable-drag',
-            onEnd: (evt) => {
-                const newOrderIds = [...evt.to.children].map(el => el.dataset.toolId);
-                handleReorder(newOrderIds);
-            }
-        });
-    }
-
-    onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            userId = user.uid;
-            toolsCollectionRef = collection(db, `users/${userId}/tools`);
-            setupFirestoreListener();
-        } else {
+        // *** ฟังก์ชันสำหรับ Login และ Logout ***
+        async function loginWithGoogle() {
             try {
-                await signInAnonymously(auth);
+                await signInWithPopup(auth, provider);
+                // onAuthStateChanged จะจัดการส่วนที่เหลือ
             } catch (error) {
-                console.error("Anonymous sign-in failed:", error);
-                document.getElementById('loading-overlay').style.display = 'none';
-                if (error.code === 'auth/configuration-not-found') {
-                    showToast("แก้ไข: โปรดเปิดใช้งาน Anonymous Sign-In ใน Firebase Console");
-                } else {
-                    showToast("ไม่สามารถเชื่อมต่อเซิฟเวอร์ได้");
-                }
+                console.error("Google sign-in failed:", error);
+                showToast("การเข้าสู่ระบบล้มเหลว");
             }
         }
-    });
 
-    initializeDragAndDrop();
-  </script>
+        async function logout() {
+            try {
+                await signOut(auth);
+                // onAuthStateChanged จะจัดการส่วนที่เหลือ
+            } catch (error) {
+                console.error("Logout failed:", error);
+                showToast("การออกจากระบบล้มเหลว");
+            }
+        }
+
+        // --- Core UI Rendering (เหมือนเดิม) ---
+        function renderTools(tools) {
+            const toolListContainer = document.getElementById('tool-list');
+            toolListContainer.innerHTML = '';
+            currentTools = tools;
+
+            if (tools.length === 0) {
+                toolListContainer.innerHTML = `<div class="text-center text-slate-400 p-4"><p>ยังไม่มีเครื่องมือ</p><p class="text-sm">คลิก '+' เพื่อเพิ่มเครื่องมือแรกของคุณ</p></div>`;
+                document.getElementById("toolFrame").src = "about:blank";
+                document.getElementById('mobile-tool-title').textContent = "Dashboard";
+                return;
+            }
+
+            tools.forEach((tool, index) => {
+                const toolItem = document.createElement('div');
+                toolItem.className = 'tool-item flex items-center justify-between p-2 rounded hover:bg-slate-700 transition-colors';
+                toolItem.dataset.toolId = tool.id;
+
+                const link = document.createElement('a');
+                link.href = '#';
+                link.textContent = tool.displayName;
+                link.className = 'block flex-grow truncate pr-2';
+                link.onclick = (e) => { e.preventDefault(); loadTool(tool.id); setActive(toolItem); };
+                
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.className = 'tool-item-buttons flex items-center space-x-2';
+                const editButton = document.createElement('button');
+                editButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/><path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5z"/></svg>`;
+                editButton.className = 'text-slate-400 hover:text-sky-400';
+                editButton.onclick = (e) => { e.stopPropagation(); openFormModal('edit', tool.id); };
+                
+                const deleteButton = document.createElement('button');
+                deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>`;
+                deleteButton.className = 'text-slate-400 hover:text-red-500';
+                deleteButton.onclick = (e) => { e.stopPropagation(); openDeleteModal(tool.id, tool.displayName); };
+                buttonsContainer.appendChild(editButton);
+                buttonsContainer.appendChild(deleteButton);
+                toolItem.appendChild(link);
+                toolItem.appendChild(buttonsContainer);
+                
+                // *** ปรับปรุง Logic การเลือก tool แรก ***
+                if (index === 0 && !currentOpenToolId) {
+                    loadTool(tool.id);
+                    setActive(toolItem);
+                } else if (currentOpenToolId === tool.id) {
+                    setActive(toolItem);
+                }
+                
+                toolListContainer.appendChild(toolItem);
+            });
+        }
+        
+        // --- Firestore Listener (เหมือนเดิม) ---
+        function setupFirestoreListener() {
+            if (unsubscribe) unsubscribe(); 
+            
+            const q = query(toolsCollectionRef, orderBy("order"));
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                const tools = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderTools(tools);
+                document.getElementById('loading-overlay').style.display = 'none';
+            }, (error) => {
+                console.error("Error fetching tools:", error);
+                showToast("ไม่สามารถโหลดข้อมูลได้");
+                document.getElementById('loading-overlay').style.display = 'none';
+            });
+        }
+
+        // --- โค้ดส่วนที่เหลือ (Tool Actions, CRUD, Modals) เหมือนเดิมทั้งหมด ---
+        function loadTool(toolId) {
+            const tool = currentTools.find(t => t.id === toolId);
+            if (tool) {
+                document.getElementById("toolFrame").src = tool.url;
+                document.getElementById('mobile-tool-title').textContent = tool.displayName;
+                currentOpenToolId = toolId;
+                if (window.innerWidth < 640) toggleSidebar();
+            }
+        }
+        
+        function setActive(el) {
+            document.querySelectorAll('.tool-item.bg-slate-700').forEach(item => item.classList.remove('bg-slate-700'));
+            if (el) el.classList.add('bg-slate-700');
+        }
+
+        async function handleSaveTool() {
+            const id = document.getElementById('toolId').value;
+            const displayName = document.getElementById('toolDisplayName').value.trim();
+            const url = document.getElementById('toolUrl').value.trim();
+            const errorP = document.getElementById('modal-error');
+            
+            if (!displayName) { errorP.textContent = 'กรุณาใส่ชื่อเครื่องมือ'; errorP.classList.remove('hidden'); return; }
+            if (!url || !url.startsWith('http')) { errorP.textContent = 'URL ไม่ถูกต้อง (ต้องขึ้นต้นด้วย http)'; errorP.classList.remove('hidden'); return; }
+
+            try {
+                if (id) { // Edit mode
+                    const toolDocRef = doc(db, `users/${userId}/tools`, id);
+                    await updateDoc(toolDocRef, { displayName, url });
+                    showToast('แก้ไขเครื่องมือสำเร็จแล้ว');
+                } else { // Add mode
+                    await addDoc(toolsCollectionRef, { displayName, url, order: currentTools.length });
+                    showToast('เพิ่มเครื่องมือใหม่แล้ว');
+                }
+                closeFormModal();
+            } catch (error) {
+                console.error("Error saving tool:", error);
+                showToast("เกิดข้อผิดพลาดในการบันทึก");
+            }
+        }
+
+        async function performDelete(toolIdToDelete) {
+            try {
+                const toolDocRef = doc(db, `users/${userId}/tools`, toolIdToDelete);
+                await deleteDoc(toolDocRef);
+                if (currentOpenToolId === toolIdToDelete) currentOpenToolId = null;
+                closeDeleteModal();
+                showToast('ลบเครื่องมือแล้ว');
+            } catch (error) {
+                console.error("Error deleting tool:", error);
+                showToast("เกิดข้อผิดพลาดในการลบ");
+            }
+        }
+        
+        async function handleReorder(newOrderIds) {
+            const batch = writeBatch(db);
+            newOrderIds.forEach((id, index) => {
+                const docRef = doc(db, `users/${userId}/tools`, id);
+                batch.update(docRef, { order: index });
+            });
+            try {
+                await batch.commit();
+                showToast('จัดลำดับใหม่แล้ว');
+            } catch (error) {
+                console.error("Error reordering:", error);
+                showToast("เกิดข้อผิดพลาดในการจัดลำดับ");
+            }
+        }
+        
+        window.openFormModal = (mode, toolId = null) => {
+            const modal = document.getElementById('formModal');
+            document.getElementById('modal-error').classList.add('hidden');
+            document.getElementById('toolId').value = toolId || '';
+            
+            if (mode === 'edit') {
+                const toolToEdit = currentTools.find(t => t.id === toolId);
+                if (!toolToEdit) return;
+                document.getElementById('formModalTitle').textContent = "แก้ไขเครื่องมือ";
+                document.getElementById('formModalSaveButton').textContent = "บันทึกการเปลี่ยนแปลง";
+                document.getElementById('toolDisplayName').value = toolToEdit.displayName;
+                document.getElementById('toolUrl').value = toolToEdit.url;
+            } else {
+                document.getElementById('formModalTitle').textContent = "เพิ่มเครื่องมือใหม่";
+                document.getElementById('formModalSaveButton').textContent = "บันทึก";
+                document.getElementById('toolDisplayName').value = '';
+                document.getElementById('toolUrl').value = '';
+            }
+            document.getElementById('formModalSaveButton').onclick = handleSaveTool;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+        window.closeFormModal = () => document.getElementById('formModal').classList.add('hidden');
+        
+        window.openDeleteModal = (toolId, displayName) => {
+            document.getElementById('toolNameToDelete').textContent = displayName;
+            document.getElementById('confirmDeleteButton').onclick = () => performDelete(toolId);
+            document.getElementById('deleteConfirmModal').classList.remove('hidden');
+            document.getElementById('deleteConfirmModal').classList.add('flex');
+        };
+        window.closeDeleteModal = () => document.getElementById('deleteConfirmModal').classList.add('hidden');
+        window.toggleSidebar = () => {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebar-overlay').classList.toggle('hidden');
+        };
+        
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.querySelector('#toast-message').textContent = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // --- Initialization ---
+        function initializeDragAndDrop() {
+            new Sortable(document.getElementById('tool-list'), {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                onEnd: (evt) => {
+                    const newOrderIds = [...evt.to.children].map(el => el.dataset.toolId);
+                    handleReorder(newOrderIds);
+                }
+            });
+        }
+        
+        // *** ปรับแก้ Logic การตรวจสอบสถานะ Login ใหม่ทั้งหมด ***
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // --- ผู้ใช้ Login อยู่ ---
+                userId = user.uid;
+                toolsCollectionRef = collection(db, `users/${userId}/tools`);
+
+                // แสดงหน้าแอป ซ่อนหน้า Login
+                loginContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                appContainer.classList.add('flex');
+
+                // เริ่มดึงข้อมูล
+                setupFirestoreListener();
+            } else {
+                // --- ผู้ใช้ออกจากระบบ หรือยังไม่ได้ Login ---
+                userId = null;
+                if (unsubscribe) unsubscribe(); // หยุดดึงข้อมูลเก่า
+
+                // แสดงหน้า Login ซ่อนหน้าแอป
+                appContainer.classList.add('hidden');
+                appContainer.classList.remove('flex');
+                loginContainer.classList.remove('hidden');
+                
+                // ซ่อน loading (ถ้ามี)
+                document.getElementById('loading-overlay').style.display = 'none';
+            }
+        });
+
+        // --- Event Listeners ---
+        loginButton.addEventListener('click', loginWithGoogle);
+        logoutButton.addEventListener('click', logout);
+
+        initializeDragAndDrop();
+    </script>
 </body>
 </html>
-
