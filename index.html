@@ -103,21 +103,20 @@
         // --- Firebase SDK Imports ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        // *** เพิ่ม Imports สำหรับ Google Auth ***
         import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import Sortable from "https://cdn.jsdelivr.net/npm/sortablejs@latest/modular/sortable.esm.js";
 
-        // --- Firebase Configuration (เหมือนเดิม) ---
+        // --- Firebase Configuration (นี่คือส่วนที่อัปเดตเป็นของโปรเจกต์ใหม่) ---
         const firebaseConfig = {
-            apiKey: "AIzaSyCziiVJX7w8dhPMs4SWOeq5HwBkT9DkBBs",
-            authDomain: "tools-dashboard-5ee9f.firebaseapp.com",
-            projectId: "tools-dashboard-5ee9f",
-            storageBucket: "tools-dashboard-5ee9f.appspot.com",
-            messagingSenderId: "1082221439803",
-            appId: "1:1082221439803:web:5b29567ae220b37900e51e"
+          apiKey: "AIzaSyA1vFYbYFHr5n2G8ULRfuLcg0CDp4MuOQo",
+          authDomain: "my-tools-v2-5cf61.firebaseapp.com",
+          projectId: "my-tools-v2-5cf61",
+          storageBucket: "my-tools-v2-5cf61.appspot.com",
+          messagingSenderId: "789124530524",
+          appId: "1:789124530524:web:50dddbcc66e94ff0fec199"
         };
 
-        // --- Global State (เหมือนเดิม) ---
+        // --- Global State ---
         let currentTools = [];
         let currentOpenToolId = null;
         let toastTimeout;
@@ -125,12 +124,10 @@
         let toolsCollectionRef = null;
         let unsubscribe = null; 
 
-        // --- Firebase Initialization (เหมือนเดิม) ---
+        // --- Firebase Initialization ---
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        
-        // *** เพิ่ม Provider สำหรับ Google ***
         const provider = new GoogleAuthProvider();
 
         // --- UI Element References ---
@@ -139,11 +136,10 @@
         const loginButton = document.getElementById('login-button');
         const logoutButton = document.getElementById('logout-button');
 
-        // *** ฟังก์ชันสำหรับ Login และ Logout ***
+        // --- Functions ---
         async function loginWithGoogle() {
             try {
                 await signInWithPopup(auth, provider);
-                // onAuthStateChanged จะจัดการส่วนที่เหลือ
             } catch (error) {
                 console.error("Google sign-in failed:", error);
                 showToast("การเข้าสู่ระบบล้มเหลว");
@@ -153,14 +149,12 @@
         async function logout() {
             try {
                 await signOut(auth);
-                // onAuthStateChanged จะจัดการส่วนที่เหลือ
             } catch (error) {
                 console.error("Logout failed:", error);
                 showToast("การออกจากระบบล้มเหลว");
             }
         }
-
-        // --- Core UI Rendering (เหมือนเดิม) ---
+        
         function renderTools(tools) {
             const toolListContainer = document.getElementById('tool-list');
             toolListContainer.innerHTML = '';
@@ -200,7 +194,6 @@
                 toolItem.appendChild(link);
                 toolItem.appendChild(buttonsContainer);
                 
-                // *** ปรับปรุง Logic การเลือก tool แรก ***
                 if (index === 0 && !currentOpenToolId) {
                     loadTool(tool.id);
                     setActive(toolItem);
@@ -212,7 +205,6 @@
             });
         }
         
-        // --- Firestore Listener (เหมือนเดิม) ---
         function setupFirestoreListener() {
             if (unsubscribe) unsubscribe(); 
             
@@ -228,7 +220,6 @@
             });
         }
 
-        // --- โค้ดส่วนที่เหลือ (Tool Actions, CRUD, Modals) เหมือนเดิมทั้งหมด ---
         function loadTool(toolId) {
             const tool = currentTools.find(t => t.id === toolId);
             if (tool) {
@@ -341,7 +332,6 @@
             toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
         }
 
-        // --- Initialization ---
         function initializeDragAndDrop() {
             new Sortable(document.getElementById('tool-list'), {
                 animation: 150,
@@ -354,39 +344,27 @@
             });
         }
         
-        // *** ปรับแก้ Logic การตรวจสอบสถานะ Login ใหม่ทั้งหมด ***
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // --- ผู้ใช้ Login อยู่ ---
                 userId = user.uid;
                 toolsCollectionRef = collection(db, `users/${userId}/tools`);
-
-                // แสดงหน้าแอป ซ่อนหน้า Login
                 loginContainer.classList.add('hidden');
                 appContainer.classList.remove('hidden');
                 appContainer.classList.add('flex');
-
-                // เริ่มดึงข้อมูล
                 setupFirestoreListener();
             } else {
-                // --- ผู้ใช้ออกจากระบบ หรือยังไม่ได้ Login ---
                 userId = null;
-                if (unsubscribe) unsubscribe(); // หยุดดึงข้อมูลเก่า
-
-                // แสดงหน้า Login ซ่อนหน้าแอป
+                if (unsubscribe) unsubscribe(); 
                 appContainer.classList.add('hidden');
                 appContainer.classList.remove('flex');
                 loginContainer.classList.remove('hidden');
-                
-                // ซ่อน loading (ถ้ามี)
                 document.getElementById('loading-overlay').style.display = 'none';
             }
         });
 
-        // --- Event Listeners ---
+        // --- Event Listeners & Initialization ---
         loginButton.addEventListener('click', loginWithGoogle);
         logoutButton.addEventListener('click', logout);
-
         initializeDragAndDrop();
     </script>
 </body>
